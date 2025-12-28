@@ -39,8 +39,13 @@ export const getSalonsByOwner = async (owner_id: number) => {
 
 export const getSalonSpaById = async (salon_id: number) => {
     try {
-        const {data , error} = await supabase.from('salons_spas').select('*').eq('id', salon_id)
+        const {data , error} = await supabase
+        .from('salons_spas')
+        .select('*')
+        .eq('id', salon_id)
+
         if(error || data.length===0) throw error || new Error('Salon/Spa not found')
+            
         return {
             success : true,
             data : data[0]

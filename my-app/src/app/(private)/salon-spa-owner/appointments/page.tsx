@@ -1,17 +1,16 @@
 "use client";
-import {
-  getAppointmentsByUserId,
-  updateAppointmentStatus,
-} from "@/actions/appointments";
-import ErrorMessage from "@/components/ui/error-message";
-import Loader from "@/components/ui/loader";
-import PageTitle from "@/components/ui/page-title";
-import { IAppointment } from "@/interfaces";
-import usersGlobalStore, {
-  IUsersGlobalStore,
-} from "@/store/users-global-store";
+
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import dayjs from "dayjs";
+
+
+
+import {getAppointmentsByOwnerId,updateAppointmentStatus} from "@/actions/appointments";
+import PageTitle from "@/components/ui/page-title";
+import { IAppointment, ISalon_Spa } from "@/interfaces";
+import usersGlobalStore, {IUsersGlobalStore} from "@/store/users-global-store";
+
 import {
   Table,
   TableBody,
@@ -22,19 +21,34 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import ErrorMessage from "@/components/ui/error-message";
+import Loader from "@/components/ui/loader";
 import { appointmentStatuses } from "@/constants";
-import dayjs from "dayjs";
+import Filters from "./_components/filters";
+import { getSalonsByOwner } from "@/actions/salon-spas";
 
-function UserAppointmentsList() {
-  const [appointments, setAppointments] = useState<IAppointment[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+function AppointmentsList() {
 
   const { user } = usersGlobalStore() as IUsersGlobalStore;
+
+
+  const [appointments, setAppointments] = useState<IAppointment[]>([]);
+  const [salonSpas, setSalonSpas] = useState<ISalon_Spa[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedSalon, setSelectedSalon] = useState<number | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [filtersCleared , setFiltersCleared] = useState<boolean>(false);
+
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response: any = await getAppointmentsByUserId(user?.id!);
+      const response: any = await getAppointmentsByOwnerId(user?.id!, {
+        salon_spa_id: selectedSalon,
+        status: selectedStatus,
+        date: selectedDate,
+      });
       if (response.success) {
         setAppointments(response.data);
       } else {
@@ -47,11 +61,29 @@ function UserAppointmentsList() {
     }
   };
 
+  const fetchSalonSpas = async () => {
+    try {
+      const response: any = await getSalonsByOwner(user?.id!);
+      if (!response.success) throw new Error(response.message);
+      setSalonSpas(response.data);
+    } catch (error) {
+      toast.error("Error fetching salon/spas");
+    }
+  };
+
   useEffect(() => {
     if (user) {
       fetchData();
+      fetchSalonSpas();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (filtersCleared) {
+      fetchData();
+      setFiltersCleared(false);
+    }
+  }, [filtersCleared]);
 
   const updateStatusHandler = async (id: number, status: string) => {
     try {
@@ -74,12 +106,39 @@ function UserAppointmentsList() {
     }
   };
 
-  const columns = ["Id", "Salon/Spa Name", "Date", "Time", "Booked On" , "Status"];
+  const columns = [
+    "Id",
+    "Salon/Spa Name",
+    "Customer Name",
+    "Date",
+    "Time",
+    "Booked On",
+    "Status",
+  ];
   return (
     <div>
-      <PageTitle title="My Appointments" />
+      <PageTitle title="Appointments" />
 
       {loading && <Loader />}
+
+      {!loading && (
+        <Filters
+          salonsSpas={salonSpas}
+          selectedSalon={selectedSalon}
+          setSelectedSalon={setSelectedSalon}
+          selectedStatus={selectedStatus}
+          setSelectedStatus={setSelectedStatus}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          onFilter={fetchData}
+          onClearFilter={() => {
+            setSelectedSalon(null);
+            setSelectedStatus(null);
+            setSelectedDate(null);
+            setFiltersCleared(true);
+          }}
+        />
+      )}
 
       {!loading && appointments.length === 0 && (
         <ErrorMessage error="No appointments found" />
@@ -105,6 +164,9 @@ function UserAppointmentsList() {
                   <TableCell data-label="Salon/Spa Name">
                     {item?.salon_spa_data?.name}
                   </TableCell>
+                  <TableCell data-label="Customer Name">
+                    {item?.user_data?.name}
+                  </TableCell>
                   <TableCell data-label="Date">{item.date}</TableCell>
                   <TableCell data-label="Time">{item.time}</TableCell>
                   <TableCell data-label="Booked On">
@@ -113,17 +175,26 @@ function UserAppointmentsList() {
                   <TableCell data-label="Status">
                     <select
                       value={item.status}
-                      className={`border border-gray-400 rounded-md p-1 ${item.status === "cancelled" ? "opacity-50 pointer-events-none" : ""}`}
+                      className={`border border-gray-400 rounded-md p-1 ${
+                        item.status === "cancelled"
+                          ? "opacity-50 pointer-events-none"
+                          : ""
+                      }`}
                       onChange={(e) =>
                         updateStatusHandler(item.id, e.target.value)
                       }
-                      disabled={dayjs(item.date).isBefore(dayjs(), "day") || item.status === "cancelled"}
+                      disabled={
+                        dayjs(item.date).isBefore(dayjs(), "day") ||
+                        item.status === "cancelled"
+                      }
                     >
                       {appointmentStatuses.map((status) => (
                         <option key={status.value} value={status.value}>
                           {status.label}
                         </option>
                       ))}
+
+                      <option value="completed">Completed</option>
                     </select>
                   </TableCell>
                 </TableRow>
@@ -136,4 +207,4 @@ function UserAppointmentsList() {
   );
 }
 
-export default UserAppointmentsList;
+export default AppointmentsList;
